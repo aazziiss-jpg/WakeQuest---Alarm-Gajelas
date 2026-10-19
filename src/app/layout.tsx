@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next"
 import { Plus_Jakarta_Sans } from "next/font/google"
+import { PWAProvider } from "@/components/PWAProvider"
+import { RingingOverlay } from "@/features/alarm/RingingOverlay"
+import { AlarmEngine } from "@/features/alarm/AlarmEngine"
+import { WakeLockManager } from "@/components/WakeLockManager"
 import "./globals.css"
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -38,7 +42,12 @@ export default function RootLayout({
   return (
     <html lang="id" suppressHydrationWarning>
       <body className={`${plusJakartaSans.variable} font-sans min-h-screen flex flex-col`}>
-        {children}
+        <PWAProvider>
+          <WakeLockManager />
+          <AlarmEngine />
+          <RingingOverlay />
+          {children}
+        </PWAProvider>
       </body>
     </html>
   )
