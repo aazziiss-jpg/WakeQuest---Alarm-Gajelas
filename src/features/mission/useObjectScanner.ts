@@ -1,59 +1,87 @@
 import { useEffect, useState, useRef } from "react"
 import * as tf from "@tensorflow/tfjs"
+import "@tensorflow/tfjs-backend-webgl"
 import * as cocoSsd from "@tensorflow-models/coco-ssd"
 
-export function useObjectScanner(
-  videoRef: React.RefObject<HTMLVideoElement | null>,
-  targetObject: string
-) {
+export interface Prediction {
+  bbox: [number, number, number, number]
+  class: string
+  score: number
+}
+
+export function useObjectScanner(videoRef: React.RefObject<HTMLVideoElement | null>, targetObject: string) {
   const [isModelLoaded, setIsModelLoaded] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
-  const animationRef = useRef<number | null>(null)
+  const [predictions, setPredictions] = useState<Prediction[]>([])
+  const requestRef = useRef<number | null>(null)
+  const modelRef = useRef<cocoSsd.ObjectDetection | null>(null)
 
   useEffect(() => {
-    let model: cocoSsd.ObjectDetection | null = null
-    let isActive = true
+    let active = true
 
-    async function loadModel() {
-      await tf.ready()
-      model = await cocoSsd.load({ base: "lite_mobilenet_v2" })
-      if (isActive) setIsModelLoaded(true)
+    const loadModel = async () => {
+      try {
+        await tf.ready()
+        const model = await cocoSsd.load({ base: "mobilenet_v2" })
+        if (active) {
+          modelRef.current = model
+          setIsModelLoaded(true)
+        }
+      } catch (err) {}
     }
 
     loadModel()
 
-    async function detect() {
-      if (!isActive || !model || !videoRef.current) return
+    return () => {
+      active = false
+    }
+  }, [])
 
-      if (videoRef.current.readyState === 4) {
-        const predictions = await model.detect(videoRef.current)
-        const found = predictions.some(
-          (p) => p.class === targetObject && p.score > 0.6
+  useEffect(() => {
+    if (!isModelLoaded || !videoRef.current) return
+
+    const video = videoRef.current
+    let detectFrame = async () => {
+      if (video.readyState < 2 || !modelRef.current) {
+        requestRef.current = requestAnimationFrame(detectFrame)
+        return
+      }
+
+      try {
+        const preds = await modelRef.current.detect(video)
+        
+        const validPredictions = preds.map(p => ({
+          bbox: p.bbox as [number, number, number, number],
+          class: p.class,
+          score: p.score
+        }))
+
+        setPredictions(validPredictions)
+
+        const match = validPredictions.find(
+          (p) => p.class === targetObject.toLowerCase() && p.score >= 0.45
         )
 
-        if (found) {
+        if (match) {
           setIsSuccess(true)
-          isActive = false
+          if (requestRef.current) {
+            cancelAnimationFrame(requestRef.current)
+          }
           return
         }
-      }
+      } catch (err) {}
 
-      if (isActive) {
-        animationRef.current = requestAnimationFrame(detect)
-      }
+      requestRef.current = requestAnimationFrame(detectFrame)
     }
 
-    if (isModelLoaded && !isSuccess) {
-      detect()
-    }
+    detectFrame()
 
     return () => {
-      isActive = false
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current)
       }
     }
-  }, [videoRef, targetObject, isModelLoaded, isSuccess])
+  }, [isModelLoaded, videoRef, targetObject])
 
-  return { isModelLoaded, isSuccess }
+  return { isModelLoaded, isSuccess, predictions }
 }

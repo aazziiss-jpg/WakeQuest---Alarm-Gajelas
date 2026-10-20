@@ -1,9 +1,17 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAlarmStore } from "@/features/alarm/store"
 import { IconBellRinging, IconFocus2 } from "@tabler/icons-react"
+
+const TARGETS = [
+  { id: "bottle", label: "Botol Minum" },
+  { id: "cup", label: "Gelas / Cangkir" },
+  { id: "book", label: "Buku" },
+  { id: "toothbrush", label: "Sikat Gigi" },
+  { id: "cell phone", label: "Ponsel Lain" }
+]
 
 export function RingingOverlay() {
   const ringingAlarmId = useAlarmStore((state) => state.ringingAlarmId)
@@ -11,20 +19,32 @@ export function RingingOverlay() {
   const clearRinging = useAlarmStore((state) => state.clearRinging)
   const router = useRouter()
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [randomTarget, setRandomTarget] = useState(TARGETS[0])
 
   const activeAlarm = alarms.find((a) => a.id === ringingAlarmId)
 
   useEffect(() => {
-    if (ringingAlarmId && activeAlarm) {
-      audioRef.current = new Audio(activeAlarm.ringtone || "/default-ringtone.mp3")
-      audioRef.current.loop = true
-      audioRef.current.play().catch(() => {})
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current = null
-      }
+    if (!ringingAlarmId) return
+
+    const currentAlarms = useAlarmStore.getState().alarms
+    const currentActiveAlarm = currentAlarms.find((a) => a.id === ringingAlarmId)
+
+    if (!currentActiveAlarm) return
+
+    const randomIndex = Math.floor(Math.random() * TARGETS.length)
+    setRandomTarget(TARGETS[randomIndex])
+
+    const audio = new Audio(currentActiveAlarm.ringtone || "/default-ringtone.mp3")
+    audio.loop = true
+    audioRef.current = audio
+
+    const playAudio = async () => {
+      try {
+        await audio.play()
+      } catch (err) {}
     }
+
+    playAudio()
 
     return () => {
       if (audioRef.current) {
@@ -32,7 +52,7 @@ export function RingingOverlay() {
         audioRef.current = null
       }
     }
-  }, [ringingAlarmId, activeAlarm])
+  }, [ringingAlarmId])
 
   if (!ringingAlarmId || !activeAlarm) return null
 
@@ -41,7 +61,7 @@ export function RingingOverlay() {
       audioRef.current.pause()
     }
     clearRinging()
-    router.push(`/mission?target=${activeAlarm.targetObject}&alarmId=${activeAlarm.id}`)
+    router.push(`/mission?target=${randomTarget.id}&alarmId=${activeAlarm.id}`)
   }
 
   return (
@@ -56,7 +76,7 @@ export function RingingOverlay() {
         <span className="text-sm font-bold uppercase tracking-widest opacity-70">Target Pindai</span>
         <span className="text-3xl font-extrabold uppercase flex items-center gap-3">
           <IconFocus2 stroke={2} className="w-8 h-8" />
-          {activeAlarm.targetObject}
+          {randomTarget.label}
         </span>
       </div>
 
