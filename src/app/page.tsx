@@ -1,13 +1,15 @@
 "use client"
 
 import { useEffect } from "react"
-import { useAlarmStore } from "@/features/alarm/store"
-import { AlarmCard } from "@/features/alarm/AlarmCard"
-import { IconPlus } from "@tabler/icons-react"
 import Link from "next/link"
+import { useAlarmStore } from "@/features/alarm/store"
+import { useAuthStore } from "@/features/auth/store"
+import { AlarmCard } from "@/features/alarm/AlarmCard"
+import { IconPlus, IconHistory, IconUser, IconLogout } from "@tabler/icons-react"
 
 export default function HomePage() {
   const { alarms, isLoaded, fetchAlarms } = useAlarmStore()
+  const { user, logout } = useAuthStore()
 
   useEffect(() => {
     fetchAlarms()
@@ -21,6 +23,32 @@ export default function HomePage() {
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">
             Misi Pagi Hari
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link 
+            href="/history" 
+            className="p-2 border-2 border-transparent hover:border-foreground transition-colors focus:outline-none focus:ring-4 focus:ring-muted"
+            aria-label="Lihat Riwayat Misi"
+          >
+            <IconHistory stroke={2} className="w-6 h-6" />
+          </Link>
+          {user ? (
+            <button 
+              onClick={() => logout()}
+              className="p-2 border-2 border-transparent hover:border-foreground transition-colors focus:outline-none focus:ring-4 focus:ring-muted text-red-500 hover:text-foreground"
+              aria-label="Keluar Akun"
+            >
+              <IconLogout stroke={2} className="w-6 h-6" />
+            </button>
+          ) : (
+            <Link 
+              href="/auth" 
+              className="p-2 border-2 border-transparent hover:border-foreground transition-colors focus:outline-none focus:ring-4 focus:ring-muted"
+              aria-label="Masuk Akun"
+            >
+              <IconUser stroke={2} className="w-6 h-6" />
+            </Link>
+          )}
         </div>
       </header>
 

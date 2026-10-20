@@ -1,10 +1,11 @@
 "use client"
 
-import { Suspense, useEffect } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCamera } from "@/features/mission/useCamera"
 import { useObjectScanner } from "@/features/mission/useObjectScanner"
 import { useAlarmStore } from "@/features/alarm/store"
+import { useHistoryStore } from "@/features/history/store"
 import { IconAlertTriangle, IconFocus2 } from "@tabler/icons-react"
 
 function MissionContent() {
@@ -14,17 +15,49 @@ function MissionContent() {
 
   const router = useRouter()
   const toggleAlarm = useAlarmStore((state) => state.toggleAlarm)
+  const addHistory = useHistoryStore((state) => state.addHistory)
 
   const { videoRef, hasPermission } = useCamera()
-  const { isModelLoaded, isSuccess } = useObjectScanner(videoRef, target)
+  const { isModelLoaded, isSuccess, predictions } = useObjectScanner(videoRef, target)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [videoSize, setVideoSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     if (isSuccess && alarmId) {
-      toggleAlarm(alarmId).then(() => {
-        router.push("/")
+      addHistory({ alarmId, status: "success", scannedObject: target }).then(() => {
+        toggleAlarm(alarmId).then(() => {
+          router.push("/")
+        })
       })
     }
-  }, [isSuccess, alarmId, toggleAlarm, router])
+  }, [isSuccess, alarmId, target, toggleAlarm, addHistory, router])
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (videoRef.current) {
+        setVideoSize({
+          width: videoRef.current.clientWidth,
+          height: videoRef.current.clientHeight
+        })
+      }
+    }
+
+    window.addEventListener("resize", handleResize)
+    const interval = setInterval(handleResize, 1000)
+
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      clearInterval(interval)
+    }
+  }, [videoRef, isModelLoaded])
+
+  const handleGiveUp = async () => {
+    if (alarmId) {
+      await addHistory({ alarmId, status: "penalty", scannedObject: "none" })
+      await toggleAlarm(alarmId)
+    }
+    router.push("/penalty")
+  }
 
   if (hasPermission === false) {
     return (
@@ -51,7 +84,10 @@ function MissionContent() {
         </div>
       </header>
 
-      <div className="relative flex-1 border-4 border-foreground bg-muted overflow-hidden flex items-center justify-center min-h-96">
+      <div 
+        ref={containerRef}
+        className="relative flex-1 border-4 border-foreground bg-muted overflow-hidden flex items-center justify-center min-h-96"
+      >
         {!isModelLoaded && (
           <div className="absolute inset-0 z-10 bg-background flex flex-col items-center justify-center p-4 text-center">
             <IconFocus2 stroke={2} className="w-12 h-12 mb-4 animate-spin" />
@@ -66,13 +102,59 @@ function MissionContent() {
           className="absolute inset-0 w-full h-full object-cover"
         />
 
+        {isModelLoaded && videoRef.current && (
+          <svg 
+            className="absolute inset-0 w-full h-full pointer-events-none z-20"
+            viewBox={`0 0 ${videoRef.current.videoWidth || 640} ${videoRef.current.videoHeight || 480}`}
+            preserveAspectRatio="none"
+          >
+            {predictions.map((pred, i) => {
+              const [x, y, width, height] = pred.bbox
+              const isTarget = pred.class === target.toLowerCase()
+              const percentage = Math.round(pred.score * 100)
+
+              return (
+                <g key={i}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    fill="none"
+                    stroke={isTarget ? "#00ff00" : "#ff0000"}
+                    strokeWidth="4"
+                    className="animate-in fade-in duration-100"
+                  />
+                  <rect
+                    x={x}
+                    y={y > 24 ? y - 24 : y}
+                    width={width > 120 ? 120 : width}
+                    height="24"
+                    fill={isTarget ? "#00ff00" : "#ff0000"}
+                  />
+                  <text
+                    x={x + 4}
+                    y={y > 24 ? y - 8 : y + 16}
+                    fill={isTarget ? "#000000" : "#ffffff"}
+                    fontSize="14"
+                    fontWeight="bold"
+                    fontFamily="monospace"
+                  >
+                    {pred.class.toUpperCase()} ({percentage}%)
+                  </text>
+                </g>
+              )
+            })}
+          </svg>
+        )}
+
         {isModelLoaded && (
           <div className="absolute inset-0 border-8 border-transparent border-t-foreground border-b-foreground opacity-20 animate-pulse pointer-events-none" />
         )}
       </div>
 
       <button 
-        onClick={() => router.push("/")}
+        onClick={handleGiveUp}
         className="p-6 border-4 border-foreground font-extrabold text-xl uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"
       >
         Menyerah (Penalti)
