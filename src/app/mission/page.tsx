@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCamera } from "@/features/mission/useCamera"
 import { useObjectScanner } from "@/features/mission/useObjectScanner"
-import { useAlarmStore } from "@/features/alarm/store"
+import { getTargetLabel } from "@/features/mission/targets"
 import { useHistoryStore } from "@/features/history/store"
 import { IconAlertTriangle, IconFocus2 } from "@tabler/icons-react"
 
@@ -14,23 +14,21 @@ function MissionContent() {
   const alarmId = searchParams.get("alarmId")
 
   const router = useRouter()
-  const toggleAlarm = useAlarmStore((state) => state.toggleAlarm)
   const addHistory = useHistoryStore((state) => state.addHistory)
 
   const { videoRef, hasPermission } = useCamera()
-  const { isModelLoaded, isSuccess, predictions } = useObjectScanner(videoRef, target)
+  const { isModelLoaded, isSuccess, predictions, error } = useObjectScanner(videoRef, target)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     if (isSuccess && alarmId) {
+      // Alarm sekali pakai sudah dinonaktifkan oleh AlarmEngine saat berbunyi; alarm berulang harus tetap aktif.
       addHistory({ alarmId, status: "success", scannedObject: target }).then(() => {
-        toggleAlarm(alarmId).then(() => {
-          router.push("/")
-        })
+        router.push("/")
       })
     }
-  }, [isSuccess, alarmId, target, toggleAlarm, addHistory, router])
+  }, [isSuccess, alarmId, target, addHistory, router])
 
   useEffect(() => {
     const handleResize = () => {
@@ -54,7 +52,6 @@ function MissionContent() {
   const handleGiveUp = async () => {
     if (alarmId) {
       await addHistory({ alarmId, status: "penalty", scannedObject: "none" })
-      await toggleAlarm(alarmId)
     }
     router.push("/penalty")
   }
@@ -79,7 +76,7 @@ function MissionContent() {
         <div className="text-right">
           <span className="text-xs font-bold uppercase tracking-widest block mb-1">Target</span>
           <span className="text-xl font-extrabold uppercase bg-foreground text-background px-2 py-1">
-            {target}
+            {getTargetLabel(target)}
           </span>
         </div>
       </header>
@@ -88,6 +85,12 @@ function MissionContent() {
         ref={containerRef}
         className="relative flex-1 border-4 border-foreground bg-muted overflow-hidden flex items-center justify-center min-h-96"
       >
+        {error && (
+          <div className="absolute inset-0 z-30 bg-background flex items-center justify-center p-4 text-center">
+            <span className="font-extrabold uppercase tracking-widest">{error}</span>
+          </div>
+        )}
+
         {!isModelLoaded && (
           <div className="absolute inset-0 z-10 bg-background flex flex-col items-center justify-center p-4 text-center">
             <IconFocus2 stroke={2} className="w-12 h-12 mb-4 animate-spin" />
@@ -106,7 +109,7 @@ function MissionContent() {
           <svg 
             className="absolute inset-0 w-full h-full pointer-events-none z-20"
             viewBox={`0 0 ${videoRef.current.videoWidth || 640} ${videoRef.current.videoHeight || 480}`}
-            preserveAspectRatio="none"
+            preserveAspectRatio="xMidYMid slice"
           >
             {predictions.map((pred, i) => {
               const [x, y, width, height] = pred.bbox

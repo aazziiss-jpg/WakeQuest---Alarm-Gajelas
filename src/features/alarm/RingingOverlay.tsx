@@ -4,14 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAlarmStore } from "@/features/alarm/store"
 import { IconBellRinging, IconFocus2 } from "@tabler/icons-react"
-
-const TARGETS = [
-  { id: "bottle", label: "Botol Minum" },
-  { id: "cup", label: "Gelas / Cangkir" },
-  { id: "book", label: "Buku" },
-  { id: "toothbrush", label: "Sikat Gigi" },
-  { id: "cell phone", label: "Ponsel Lain" }
-]
+import { QUEST_TARGETS, pickTarget, type QuestTarget } from "@/features/mission/targets"
 
 export function RingingOverlay() {
   const ringingAlarmId = useAlarmStore((state) => state.ringingAlarmId)
@@ -19,7 +12,7 @@ export function RingingOverlay() {
   const clearRinging = useAlarmStore((state) => state.clearRinging)
   const router = useRouter()
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [randomTarget, setRandomTarget] = useState(TARGETS[0])
+  const [randomTarget, setRandomTarget] = useState<QuestTarget>(QUEST_TARGETS[0])
 
   const activeAlarm = alarms.find((a) => a.id === ringingAlarmId)
 
@@ -31,8 +24,7 @@ export function RingingOverlay() {
 
     if (!currentActiveAlarm) return
 
-    const randomIndex = Math.floor(Math.random() * TARGETS.length)
-    setRandomTarget(TARGETS[randomIndex])
+    setRandomTarget(pickTarget(currentActiveAlarm.targetObject))
 
     const audio = new Audio(currentActiveAlarm.ringtone || "/default-ringtone.mp3")
     audio.loop = true
