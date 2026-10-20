@@ -5,28 +5,56 @@ export function useCamera() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     let stream: MediaStream | null = null
 
     async function startCamera() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+          audio: false,
         })
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play()
+
+        // Cleanup sudah berjalan (mis. Strict Mode) saat izin kamera baru turun: matikan langsung
+        if (cancelled) {
+          s.getTracks().forEach((track) => track.stop())
+          return
         }
-        setHasPermission(true)
+
+        stream = s
+        const video = videoRef.current
+        if (video) {
+          video.srcObject = s
+          try {
+            await video.play()
+          } catch (err) {
+            // AbortError terjadi bila srcObject diganti saat play() berjalan; aman diabaikan
+            if (!(err instanceof DOMException && err.name === "AbortError")) {
+              console.error("[Camera] Gagal memutar video:", err)
+            }
+          }
+        }
+
+        if (!cancelled) setHasPermission(true)
       } catch (err) {
-        setHasPermission(false)
+        console.error("[Camera] Gagal mengakses kamera:", err)
+        if (!cancelled) setHasPermission(false)
       }
     }
 
     startCamera()
 
     return () => {
+      cancelled = true
       if (stream) {
         stream.getTracks().forEach((track) => track.stop())
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
       }
     }
   }, [])
